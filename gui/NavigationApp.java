@@ -1,12 +1,14 @@
 package gui;
 
 import io.PolyReader;
-import io.OsmConverter; // IMPORTAÇÃO DA NOVA CLASSE
+import io.OsmConverter;
 import model.Graph;
-import model.Node; 
+import model.Node;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileNameExtensionFilter;
+
+// Em gui/NavigationApp.java, no topo com as outras importações
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -21,24 +23,35 @@ public class NavigationApp extends JFrame {
     private Integer selectedDestination = null;
     private List<Integer> shortestPath = null;
 
+    // Em NavigationApp.java, junto com os outros componentes
+
     // Componentes da GUI
     private JLabel originLabel;
     private JLabel destinationLabel;
     private JLabel procTimeLabel;
     private JLabel nodesExploredLabel;
     private JLabel totalCostLabel;
+    private JLabel statusBarLabel;
     private JButton selectOriginBtn;
     private JButton selectDestBtn;
     private JButton calculatePathBtn;
-    private JButton importGraphPolyBtn; // Botão para importar .poly
-    private JButton importGraphOsmBtn; // NOVO: Botão para importar .osm
+    private JButton importGraphPolyBtn;
+    private JButton importGraphOsmBtn;
 
-    // Cor personalizada para LIME (verde limão) - para o caminho mais curto
-    private static final Color CUSTOM_LIME_COLOR = new Color(50, 205, 50);
+    // Checkboxes de controle de exibição
+    private JCheckBox showEdgeLabelsCheckbox;
+    // O checkbox para nós foi removido a pedido
+
+    private ButtonGroup editingModeGroup;
+    private JRadioButton addNodeRadio;
+    private JRadioButton addEdgeRadio;
+    private JRadioButton removeElementRadio;
+    private JRadioButton noneModeRadio;
+    private Integer firstNodeForEdge = null;
 
     public NavigationApp() {
         setTitle("Sistema de Navegação Primitivo (Java)");
-        setSize(1024, 768);
+        setSize(1280, 800);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
 
@@ -48,6 +61,7 @@ public class NavigationApp extends JFrame {
 
     private void initComponents() {
         graphPanel = new GraphPanel();
+        
         graphPanel.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -58,106 +72,173 @@ public class NavigationApp extends JFrame {
         originLabel = new JLabel("N/A");
         originLabel.setForeground(Color.BLUE);
         destinationLabel = new JLabel("N/A");
-        destinationLabel.setForeground(Color.RED);
-        procTimeLabel = new JLabel("Tempo (ms): N/A");
-        nodesExploredLabel = new JLabel("Nós Explorados: N/A");
-        totalCostLabel = new JLabel("Custo Total: N/A");
+        destinationLabel.setForeground(new Color(255, 140, 0));
+        procTimeLabel = new JLabel("N/A");
+        nodesExploredLabel = new JLabel("N/A");
+        totalCostLabel = new JLabel("N/A");
+        statusBarLabel = new JLabel("Pronto.");
 
-        selectOriginBtn = new JButton("Selecionar Origem");
-        selectOriginBtn.addActionListener(e -> startSelectOrigin());
-        selectDestBtn = new JButton("Selecionar Destino");
-        selectDestBtn.addActionListener(e -> startSelectDestination());
+        selectOriginBtn = new JButton("Origem");
+        selectDestBtn = new JButton("Destino");
         calculatePathBtn = new JButton("Traçar Menor Caminho");
+
+        importGraphPolyBtn = new JButton("Importar .poly");
+        importGraphOsmBtn = new JButton("Importar .osm");
+
+        showEdgeLabelsCheckbox = new JCheckBox("Rotular Arestas", true);
+
+        // Listeners
+        selectOriginBtn.addActionListener(e -> startSelectOrigin());
+        selectDestBtn.addActionListener(e -> startSelectDestination());
         calculatePathBtn.addActionListener(e -> calculateShortestPath());
-
-        importGraphPolyBtn = new JButton("Importar Grafo (.poly)");
         importGraphPolyBtn.addActionListener(e -> importPolyGraph());
+        importGraphOsmBtn.addActionListener(e -> importOsmGraph());
 
-        importGraphOsmBtn = new JButton("Importar Mapa (.osm)"); // NOVO BOTÃO
-        importGraphOsmBtn.addActionListener(e -> importOsmGraph()); // NOVO MÉTODO
+        showEdgeLabelsCheckbox.addActionListener(e -> {
+            if (graphPanel != null) {
+                graphPanel.setShowEdgeLabels(showEdgeLabelsCheckbox.isSelected());
+                graphPanel.repaint();
+            }
+        });
+
+        editingModeGroup = new ButtonGroup();
+        addNodeRadio = new JRadioButton("Adicionar Vértice");
+        addEdgeRadio = new JRadioButton("Adicionar Aresta");
+        removeElementRadio = new JRadioButton("Remover Elemento");
+        noneModeRadio = new JRadioButton("Nenhum");
+        noneModeRadio.setSelected(true);
+
+        editingModeGroup.add(addNodeRadio);
+        editingModeGroup.add(addEdgeRadio);
+        editingModeGroup.add(removeElementRadio);
+        editingModeGroup.add(noneModeRadio);
     }
 
     private void createLayout() {
-        setLayout(new BorderLayout());
+        setLayout(new BorderLayout(5, 5));
 
-        JPanel controlPanel = new JPanel();
-        controlPanel.setLayout(new BoxLayout(controlPanel, BoxLayout.Y_AXIS));
-        controlPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        JPanel controlPanel = new JPanel(new GridBagLayout());
+        controlPanel.setBorder(BorderFactory.createTitledBorder("Controles"));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(4, 4, 4, 4);
+        gbc.anchor = GridBagConstraints.WEST;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
 
-        controlPanel.add(importGraphPolyBtn); // Botão para .poly
-        controlPanel.add(importGraphOsmBtn); // Botão para .osm
-        controlPanel.add(Box.createVerticalStrut(10));
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        controlPanel.add(importGraphPolyBtn, gbc);
+        gbc.gridx = 1;
+        controlPanel.add(importGraphOsmBtn, gbc);
 
-        controlPanel.add(new JLabel("Estatísticas do Algoritmo:"));
-        controlPanel.add(procTimeLabel);
-        controlPanel.add(nodesExploredLabel);
-        controlPanel.add(totalCostLabel);
-        controlPanel.add(Box.createVerticalStrut(10));
+        gbc.gridx = 0;
+        gbc.gridy = 1;
+        gbc.gridwidth = 2;
+        controlPanel.add(new JSeparator(), gbc);
 
-        controlPanel.add(new JLabel("Origem:"));
-        controlPanel.add(originLabel);
-        controlPanel.add(new JLabel("Destino:"));
-        controlPanel.add(destinationLabel);
-        controlPanel.add(Box.createVerticalStrut(10));
+        gbc.gridy = 2;
+        gbc.gridwidth = 1;
+        controlPanel.add(new JLabel("Origem:"), gbc);
+        gbc.gridx = 1;
+        controlPanel.add(originLabel, gbc);
 
-        controlPanel.add(selectOriginBtn);
-        controlPanel.add(selectDestBtn);
-        controlPanel.add(calculatePathBtn);
-        controlPanel.add(Box.createVerticalStrut(10));
+        gbc.gridx = 0;
+        gbc.gridy = 3;
+        controlPanel.add(new JLabel("Destino:"), gbc);
+        gbc.gridx = 1;
+        controlPanel.add(destinationLabel, gbc);
 
-        JPanel controlWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        controlWrapper.add(controlPanel);
+        gbc.gridx = 0;
+        gbc.gridy = 4;
+        controlPanel.add(selectOriginBtn, gbc);
+        gbc.gridx = 1;
+        controlPanel.add(selectDestBtn, gbc);
 
-        add(controlWrapper, BorderLayout.WEST);
+        gbc.gridx = 0;
+        gbc.gridy = 5;
+        gbc.gridwidth = 2;
+        controlPanel.add(calculatePathBtn, gbc);
 
-        JScrollPane scrollPane = new JScrollPane(graphPanel);
-        add(scrollPane, BorderLayout.CENTER);
+        gbc.gridy = 6;
+        controlPanel.add(new JSeparator(), gbc);
+
+        gbc.gridy = 7;
+        controlPanel.add(new JLabel("Modo de Edição:"), gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 8;
+        gbc.gridwidth = 1;
+        controlPanel.add(noneModeRadio, gbc);
+        gbc.gridx = 1;
+        controlPanel.add(addEdgeRadio, gbc);
+
+        gbc.gridx = 0;
+        gbc.gridy = 9;
+        controlPanel.add(addNodeRadio, gbc);
+        gbc.gridx = 1;
+        controlPanel.add(removeElementRadio, gbc);
+
+        gbc.gridy = 10;
+        gbc.gridx = 0;
+        gbc.gridwidth = 2;
+        controlPanel.add(showEdgeLabelsCheckbox, gbc);
+
+        gbc.gridy = 11;
+        controlPanel.add(new JSeparator(), gbc);
+
+        gbc.gridy = 12;
+        controlPanel.add(new JLabel("Estatísticas do Algoritmo:"), gbc);
+
+        gbc.gridy = 13;
+        controlPanel.add(procTimeLabel, gbc);
+        gbc.gridy = 14;
+        controlPanel.add(nodesExploredLabel, gbc);
+        gbc.gridy = 15;
+        controlPanel.add(totalCostLabel, gbc);
+
+        gbc.gridy = 16;
+        gbc.weighty = 1.0;
+        gbc.fill = GridBagConstraints.VERTICAL;
+        controlPanel.add(new JLabel(""), gbc);
+
+        add(new JScrollPane(controlPanel), BorderLayout.WEST);
+        add(new JScrollPane(graphPanel), BorderLayout.CENTER);
+
+        JPanel statusBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        statusBar.setBorder(BorderFactory.createEtchedBorder());
+        statusBar.add(statusBarLabel);
+        add(statusBar, BorderLayout.SOUTH);
     }
 
-    // Método para importar .poly (existente)
     private void importPolyGraph() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileFilter(new FileNameExtensionFilter("Arquivos Poly (*.poly)", "poly"));
-        int result = fileChooser.showOpenDialog(this);
-
-        if (result == JFileChooser.APPROVE_OPTION) {
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             String filepath = fileChooser.getSelectedFile().getAbsolutePath();
-            PolyReader reader = new PolyReader();
             try {
-                this.graph = reader.readPolyFile(filepath);
+                this.graph = new PolyReader().readPolyFile(filepath);
                 graphPanel.setGraph(this.graph);
-                graphPanel.setZoomGeneral(0.0); // Resetar o zoom para encaixar
                 resetSelection();
+                statusBarLabel.setText("Grafo " + filepath + " importado com sucesso.");
                 JOptionPane.showMessageDialog(this, "Grafo importado de .poly com sucesso!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-
             } catch (IOException | IllegalArgumentException e) {
                 JOptionPane.showMessageDialog(this, "Erro ao importar o grafo de .poly: " + e.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
-                e.printStackTrace();
             }
         }
     }
 
-    // NOVO MÉTODO: Importar e converter arquivo .osm
     private void importOsmGraph() {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setFileFilter(new FileNameExtensionFilter("Arquivos OSM (*.osm)", "osm"));
-        int result = fileChooser.showOpenDialog(this);
-
-        if (result == JFileChooser.APPROVE_OPTION) {
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
             String filepath = fileChooser.getSelectedFile().getAbsolutePath();
-            OsmConverter converter = new OsmConverter(); // Instancia o novo conversor de OSM
             try {
-                // Converte o arquivo OSM para um objeto Graph
-                this.graph = converter.convertOsmToGraph(filepath); // Obtém o grafo convertido
-                
-                graphPanel.setGraph(this.graph); // Passa o grafo para o painel de desenho
-                graphPanel.setZoomGeneral(0.0); // Reseta o zoom para encaixar o novo grafo
+                this.graph = new OsmConverter().convertOsmToGraph(filepath);
+                graphPanel.setGraph(this.graph);
                 resetSelection();
+                statusBarLabel.setText("Mapa OSM " + filepath + " importado e convertido com sucesso.");
                 JOptionPane.showMessageDialog(this, "Mapa OSM importado e convertido com sucesso!", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
-
-            } catch (IOException | IllegalArgumentException e) { // IllegalArgumentException captura NumberFormatException
+            } catch (IOException e) {
                 JOptionPane.showMessageDialog(this, "Erro ao importar e converter mapa OSM: " + e.getMessage(), "Erro", JOptionPane.ERROR_MESSAGE);
-                e.printStackTrace();
             }
         }
     }
@@ -172,31 +253,115 @@ public class NavigationApp extends JFrame {
     private void onGraphPanelClick(MouseEvent e) {
         if (graph == null) return;
 
-        Integer clickedNodeId = graphPanel.getNearestNodeIdFromClick(e.getX(), e.getY());
-
-        if (clickedNodeId != null) {
-            System.out.println("DEBUG_GUI: Nó clicado: " + clickedNodeId);
-            if (selectedOrigin == null) {
-                setSelectedOrigin(clickedNodeId);
-            } else if (selectedDestination == null) {
-                if (!clickedNodeId.equals(selectedOrigin)) {
-                    setSelectedDestination(clickedNodeId);
-                } else {
-                    JOptionPane.showMessageDialog(this, "Selecione um nó de destino diferente do de origem.", "Aviso", JOptionPane.WARNING_MESSAGE);
+        if (noneModeRadio.isSelected()) {
+            Integer clickedNodeId = graphPanel.getNearestNodeIdFromClick(e.getX(), e.getY());
+            if (clickedNodeId != null) {
+                if (selectedOrigin == null || selectedDestination != null) {
                     resetSelection();
+                    setSelectedOrigin(clickedNodeId);
+                } else {
+                    if (!clickedNodeId.equals(selectedOrigin)) {
+                        setSelectedDestination(clickedNodeId);
+                    } else {
+                        JOptionPane.showMessageDialog(this, "Selecione um nó de destino diferente do de origem.", "Aviso", JOptionPane.WARNING_MESSAGE);
+                    }
                 }
-            } else {
-                resetSelection();
-                setSelectedOrigin(clickedNodeId);
             }
-        } else {
-            System.out.println("DEBUG_GUI: Nenhum nó próximo ao clique.");
+        } else if (addNodeRadio.isSelected()) {
+            addNewNode(e.getX(), e.getY());
+        } else if (addEdgeRadio.isSelected()) {
+            handleEdgeAdditionClick(e.getX(), e.getY());
+        } else if (removeElementRadio.isSelected()) {
+            handleRemoveElementClick(e.getX(), e.getY());
         }
+
         drawGraph();
+    }
+    
+    // MÉTODO ATUALIZADO para restaurar a remoção de arestas
+    private void handleRemoveElementClick(int clickX, int clickY) {
+        if (graph == null) return;
+
+        Integer clickedNodeId = graphPanel.getNearestNodeIdFromClick(clickX, clickY);
+
+        if (clickedNodeId != null) { // Usuário clicou perto de um nó
+            int confirm = JOptionPane.showConfirmDialog(this, "Remover nó " + clickedNodeId + " e todas as suas arestas?", "Confirmar Remoção", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                graph.removeNode(clickedNodeId);
+                resetSelection();
+            }
+        } else { // Usuário clicou fora de um nó, assume que quer remover uma aresta
+            String input = JOptionPane.showInputDialog(this, "Para remover uma aresta, digite os IDs dos nós separados por vírgula (ex: 1,2):", "Remover Aresta", JOptionPane.QUESTION_MESSAGE);
+            if (input != null && !input.trim().isEmpty()) {
+                try {
+                    String[] parts = input.split(",");
+                    if (parts.length == 2) {
+                        int u = Integer.parseInt(parts[0].trim());
+                        int v = Integer.parseInt(parts[1].trim());
+                        
+                        if (graph.removeEdge(u, v)) {
+                            JOptionPane.showMessageDialog(this, "Aresta entre " + u + " e " + v + " removida com sucesso.", "Sucesso", JOptionPane.INFORMATION_MESSAGE);
+                        } else {
+                            JOptionPane.showMessageDialog(this, "Aresta entre " + u + " e " + v + " não encontrada.", "Aviso", JOptionPane.WARNING_MESSAGE);
+                        }
+                    } else {
+                        JOptionPane.showMessageDialog(this, "Formato inválido. Por favor, use o formato 'ID1,ID2'.", "Erro de Formato", JOptionPane.ERROR_MESSAGE);
+                    }
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(this, "Os IDs dos nós devem ser números inteiros.", "Erro de Formato", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }
+    }
+
+    private void addNewNode(int clickX, int clickY) {
+        if (graph == null) {
+            graph = new Graph();
+            graphPanel.setGraph(graph);
+        }
+        
+        double graphX = (clickX - graphPanel.getOffsetX()) / graphPanel.getScaleX();
+        double graphY = (clickY - graphPanel.getOffsetY()) / graphPanel.getScaleY();
+
+        int newId = 0;
+        if (graph.getNodes() != null && !graph.getNodes().isEmpty()) {
+            newId = graph.getNodes().keySet().stream().max(Integer::compare).orElse(0) + 1;
+        }
+        
+        Node newNode = new Node(newId, graphX, graphY);
+        graph.addNode(newNode);
+    }
+
+    private void handleEdgeAdditionClick(int clickX, int clickY) {
+        if (graph == null || graph.getNodes().isEmpty()) return;
+        
+        Integer clickedNodeId = graphPanel.getNearestNodeIdFromClick(clickX, clickY);
+
+        if (clickedNodeId == null) {
+            firstNodeForEdge = null;
+            return;
+        }
+
+        if (firstNodeForEdge == null) {
+            firstNodeForEdge = clickedNodeId;
+            statusBarLabel.setText("Primeiro nó selecionado: " + firstNodeForEdge + ". Clique no segundo nó.");
+        } else {
+            if (firstNodeForEdge.equals(clickedNodeId)) return;
+
+            Node node1 = graph.getNodes().get(firstNodeForEdge);
+            Node node2 = graph.getNodes().get(clickedNodeId);
+
+            double weight = Math.sqrt(Math.pow(node1.getX() - node2.getX(), 2) + Math.pow(node1.getY() - node2.getY(), 2));
+            graph.addEdge(firstNodeForEdge, clickedNodeId, weight, false);
+            
+            statusBarLabel.setText("Aresta adicionada entre " + firstNodeForEdge + " e " + clickedNodeId + ".");
+            firstNodeForEdge = null;
+        }
     }
 
     private void startSelectOrigin() {
         resetSelection();
+        statusBarLabel.setText("Clique no nó no gráfico para definir como ORIGEM.");
         JOptionPane.showMessageDialog(this, "Clique no nó no gráfico para definir como ORIGEM.", "Seleção", JOptionPane.INFORMATION_MESSAGE);
     }
 
@@ -209,6 +374,7 @@ public class NavigationApp extends JFrame {
         selectedDestination = null;
         destinationLabel.setText("Aguardando clique...");
         drawGraph();
+        statusBarLabel.setText("Clique no nó no gráfico para definir como DESTINO.");
         JOptionPane.showMessageDialog(this, "Clique no nó no gráfico para definir como DESTINO.", "Seleção", JOptionPane.INFORMATION_MESSAGE);
     }
 
@@ -218,20 +384,18 @@ public class NavigationApp extends JFrame {
             return;
         }
 
-        System.out.printf("DEBUG_PATH: Calculando caminho de %d para %d%n", selectedOrigin, selectedDestination);
-        
         Graph.PathResult result = graph.dijkstra(selectedOrigin, selectedDestination);
 
-        procTimeLabel.setText(String.format("Tempo (ms): %.2f", result.processingTimeMs));
+        procTimeLabel.setText(String.format("Tempo: %.2f ms", result.processingTimeMs));
         nodesExploredLabel.setText(String.format("Nós Explorados: %d", result.nodesExplored));
         totalCostLabel.setText(String.format("Custo Total: %.2f", result.totalCost));
 
-        if (!result.path.isEmpty() && result.totalCost != Double.POSITIVE_INFINITY) {
+        if (result.path != null && !result.path.isEmpty()) {
             shortestPath = result.path;
-            JOptionPane.showMessageDialog(this, String.format("Menor caminho encontrado com custo %.2f.", result.totalCost), "Caminho Calculado", JOptionPane.INFORMATION_MESSAGE);
+            statusBarLabel.setText(String.format("Caminho encontrado de %d para %d com custo %.2f.", selectedOrigin, selectedDestination, result.totalCost));
         } else {
             shortestPath = null;
-            JOptionPane.showMessageDialog(this, "Não foi possível encontrar um caminho entre os nós selecionados.", "Caminho Não Encontrado", JOptionPane.INFORMATION_MESSAGE);
+            statusBarLabel.setText(String.format("Não foi possível encontrar um caminho entre %d e %d.", selectedOrigin, selectedDestination));
         }
         drawGraph();
     }
@@ -242,25 +406,26 @@ public class NavigationApp extends JFrame {
         shortestPath = null;
         originLabel.setText("N/A");
         destinationLabel.setText("N/A");
-        procTimeLabel.setText("Tempo (ms): N/A");
-        nodesExploredLabel.setText("Nós Explorados: N/A");
-        totalCostLabel.setText("Custo Total: N/A");
-        drawGraph();
+        procTimeLabel.setText("N/A");
+        nodesExploredLabel.setText("N/A");
+        totalCostLabel.setText("N/A");
+        statusBarLabel.setText("Seleção reiniciada. Escolha uma nova origem.");
+        if (graphPanel != null) drawGraph();
     }
 
     public void setSelectedOrigin(Integer node) {
         this.selectedOrigin = node;
         this.originLabel.setText(node != null ? node.toString() : "N/A");
+        statusBarLabel.setText("Origem selecionada: " + (node != null ? node : "Nenhum") + ". Selecione um destino.");
     }
 
     public void setSelectedDestination(Integer node) {
         this.selectedDestination = node;
         this.destinationLabel.setText(node != null ? node.toString() : "N/A");
+        statusBarLabel.setText("Destino selecionado: " + (node != null ? node : "Nenhum") + ". Calcule o caminho.");
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            new NavigationApp().setVisible(true);
-        });
+        SwingUtilities.invokeLater(() -> new NavigationApp().setVisible(true));
     }
 }
